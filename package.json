@@ -1,0 +1,75 @@
+{
+  "name": "local-live",
+  "productName": "Local Live",
+  "version": "0.3.0",
+  "private": true,
+  "description": "Compartilhamento privado de tela entre amigos, por WebRTC.",
+  "author": "Local Live",
+  "license": "MIT",
+  "main": "src/main.cjs",
+  "scripts": {
+    "build": "node scripts/build.cjs",
+    "start": "npm run build && electron .",
+    "test": "node --test test/*.test.cjs",
+    "test:integration": "npm run build && node test/rooms.cjs && node test/audio-recovery.cjs && node test/share-ui.cjs",
+    "dist:mac": "npm run build && electron-builder --mac zip --arm64 --x64",
+    "dist:win": "npm run build && electron-builder --win zip --x64"
+  },
+  "dependencies": {
+    "peerjs": "1.5.5"
+  },
+  "devDependencies": {
+    "electron": "45.2.1",
+    "electron-builder": "26.18.0",
+    "esbuild": "0.28.2",
+    "node-addon-api": "8.3.0",
+    "peer": "1.0.2",
+    "playwright": "1.56.1"
+  },
+  "build": {
+    "appId": "local.entretelas.app",
+    "productName": "Local Live",
+    "artifactName": "Local-Live-${version}-${os}-${arch}.${ext}",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "src/*.cjs",
+      "dist/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "afterPack": "scripts/after-pack.cjs",
+    "mac": {
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.social-networking",
+      "identity": null,
+      "extendInfo": {
+        "NSScreenCaptureUsageDescription": "Compartilhar a tela ou janela escolhida com os amigos na sua sala.",
+        "NSAudioCaptureUsageDescription": "Incluir o áudio do sistema na transmissão, filtrando a chamada do Discord.",
+        "NSLocalNetworkUsageDescription": "Conectar diretamente aos amigos para transmitir v\u00eddeo e \u00e1udio."
+      }
+    },
+    "win": {
+      "icon": "assets/icon.png",
+      "signExecutable": false
+    },
+    "extraResources": [
+      {
+        "from": "native-audio/${os}-${arch}",
+        "to": "native-audio",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "protocols": [
+      {
+        "name": "Convite Local Live",
+        "schemes": [
+          "locallive"
+        ]
+      }
+    ]
+  }
+}

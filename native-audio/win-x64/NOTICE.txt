@@ -1,0 +1,7 @@
+Local Live Windows audio helper — MIT.
+Source: native/windows/audio-helper.cpp
+Built with LLVM-MinGW 20261020, statically linked C++ runtime.
+Runtime license notices are included in licenses/.
+Captures WASAPI audio excluding one process tree.
+Protocol: PCM s16le 48000 Hz stereo on stdout, JSON statuses on stderr.
+No legacy native-audio-node Windows binary is used.

@@ -1,0 +1,5 @@
+native-audio-node
+Upstream: https://github.com/predict-woo/native-audio-node
+License: MIT (declared by upstream and the npm packages).
+macOS source compiled locally; Windows x64 binary: @native-audio-node/win32-x64 0.3.3.
+Source tree SHA: 2bde1cc31d5d9c9d4f4457ffedf550270512363d

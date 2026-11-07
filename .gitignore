@@ -1,0 +1,11 @@
+node_modules/
+dist/
+release/
+test/*-preview.png
+.DS_Store
+native-build/
+assets/icon.iconset/
+.env
+.env.*
+local-live-preferences.json
+*.log
