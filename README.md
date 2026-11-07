@@ -19,6 +19,7 @@ Crie uma sala com um nome, copie o convite e envie aos amigos. A entrada é dire
 
 - **Salas salvas:** entre uma vez e volte pela barra lateral.
 - **Disponibilidade real:** indicador verde para **Online**; salas **Offline** ficam cinza. A consulta periódica não entra na sala nem recebe mídia. Ao iniciar, **Verificando…** evita mostrar um estado inventado; falhas da sinalização aparecem como **Sem conexão**. Uma rede que bloqueia P2P pode tornar uma sala indisponível mesmo com o criador conectado.
+- **Salas offline:** convites de outras pessoas ficam desabilitados enquanto a sala está Offline. Suas próprias salas continuam clicáveis para abri-las e mostram **Offline · Sua sala**. O rótulo **Sua sala** identifica suas salas também nos demais estados.
 - **Sua tela no centro:** quando você está transmitindo sem assistir a outra tela, a prévia aparece no player principal, sempre sem reproduzir o próprio áudio. Os controles de qualidade/volume aparecem ao assistir a outra pessoa.
 - **Compartilhamento independente:** encerrar sua tela mantém a sala e as outras transmissões.
 - **Navegação sem interrupção:** abrir o Início mantém a sala, o compartilhamento e a transmissão assistida. Volte pelo botão **Voltar à sala** ou pela sala na lateral. Use **Sair** para desconectar.

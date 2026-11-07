@@ -48,10 +48,11 @@ function savedRooms() {
     button.dataset.roomId = saved.id; button.dataset.status = status;
     const icon = document.createElement('span'); icon.className = `room-symbol ${online ? 'online' : 'offline'}`; icon.setAttribute('aria-hidden', 'true');
     const text = document.createElement('div'), title = document.createElement('strong'), subtitle = document.createElement('small');
-    title.textContent = saved.name; subtitle.textContent = online ? 'Online' : status === 'checking' ? 'Verificando…' : status === 'unknown' ? 'Sem conexão' : 'Offline';
-    button.title = online ? 'Sala disponível' : status === 'offline' ? 'Sala indisponível. Quem criou precisa mantê-la aberta; a rede também pode impedir a conexão.' : 'Consultando a disponibilidade da sala.';
+    const statusLabel = online ? 'Online' : status === 'checking' ? 'Verificando…' : status === 'unknown' ? 'Sem conexão' : 'Offline';
+    title.textContent = saved.name; subtitle.textContent = `${statusLabel}${saved.owned ? ' · Sua sala' : ''}`;
+    button.title = online ? 'Sala disponível' : status === 'offline' ? (saved.owned ? 'Sua sala está fechada. Clique para abri-la.' : 'Sala indisponível. Aguarde quem criou abri-la; a rede também pode impedir a conexão.') : 'Consultando a disponibilidade da sala.';
     text.append(title, subtitle); button.append(icon, text);
-    button.onclick = () => enterSaved(saved); button.disabled = busy; $('saved-list').append(button);
+    button.onclick = () => enterSaved(saved); button.disabled = busy || (status === 'offline' && !saved.owned); $('saved-list').append(button);
   }
 }
 async function leaveCurrent() {
@@ -60,7 +61,11 @@ async function leaveCurrent() {
   room.leave(); return true;
 }
 async function enterSaved(saved) {
+  if (busy) return;
   if (room.active && room.identity?.id === saved.id) { view = 'room'; controls(); return; }
+  // Recheck at activation time so an outdated click handler cannot leave the
+  // current room after the destination has gone offline.
+  if (!saved.owned && presence.state(saved.id) === 'offline') return;
   if (!await leaveCurrent()) return;
   busy = true; controls(); notice();
   try { if (saved.owned) await room.create(readInvite(saved.invite), saved.name, name()); else await room.join(saved.invite, name()); }

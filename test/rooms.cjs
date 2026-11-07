@@ -5,8 +5,11 @@ const { execFileSync } = require('node:child_process');
 const root = path.resolve(__dirname, '..'), apps = [], temp = fs.mkdtempSync(path.join(os.tmpdir(), 'local-live-rooms-'));
 execFileSync(process.execPath, ['scripts/build.cjs'], { cwd: root, env: { ...process.env, ENTRETELAS_TEST: '1' } });
 let server;
+const offlineId=require('node:crypto').randomUUID();
+const offlineInvite=require('../src/room-protocol.cjs').inviteFor({id:offlineId,secret:require('node:crypto').randomBytes(24).toString('hex')},'Sala offline de outra pessoa');
 const wait = (page, fn) => page.waitForFunction(fn, null, { timeout: 30000 });
 async function launch(name) {
+ if(name==='friend')new(require('../src/preferences.cjs').Preferences)(path.join(temp,name)).remember(offlineInvite,'Sala offline de outra pessoa');
  const app = await _electron.launch({ args: [root], env: { ...process.env, ENTRETELAS_TEST: '1', ENTRETELAS_TEST_DATA: path.join(temp, name) }, timeout: 30000 }); apps.push(app);
  const page = await app.firstWindow(); page.on('pageerror', e => console.error('PAGE', name, e.message)); await wait(page, () => !!window.__test); return page;
 }
@@ -36,6 +39,13 @@ async function publish(page, height = 720, fps = 30) {
  await b.selectOption('#watch-height','480'); await wait(a,()=>[...window.__test.room.watchers.values()].some(w=>w.quality.height===480)); await wait(b,()=>document.getElementById('remote').videoHeight===480);
  await b.locator('#volume').fill('25'); await b.locator('#volume').dispatchEvent('input'); assert.equal(await b.evaluate(()=>document.getElementById('remote-audio').volume),.25);
  console.log('PASS: vídeo/áudio recebidos, volume e qualidade/FPS limitados à transmissão; sem botão de pausa.');
+ await b.waitForFunction(id=>document.querySelector(`[data-room-id="${id}"]`)?.dataset.status==='offline',offlineId);
+ const offlineButton=b.locator(`[data-room-id="${offlineId}"]`);
+ assert.equal(await offlineButton.isDisabled(),true);
+ assert.equal(await offlineButton.locator('small').textContent(),'Offline');
+ await b.evaluate(async id=>{const room=window.__test.room;window.__beforeOffline={call:room.call,peer:room.peer,stream:room.remoteStream};const button=document.querySelector(`[data-room-id="${id}"]`);button.click();await button.onclick();},offlineId);
+ assert.equal(await b.evaluate(()=>{const room=window.__test.room,previous=window.__beforeOffline;return room.active&&room.call===previous.call&&room.peer===previous.peer&&room.remoteStream===previous.stream;}),true);
+ console.log('PASS: sala offline de outra pessoa é bloqueada sem interromper a chamada atual, inclusive com um acionamento antigo.');
  await b.evaluate(async()=>{const context=new AudioContext({sinkId:{type:'none'}}), source=context.createMediaStreamSource(window.__test.room.remoteStream), meter=context.createAnalyser(),mute=context.createGain();mute.gain.value=1;source.connect(meter);meter.connect(mute);mute.connect(context.destination);await context.resume(); window.__meter=meter;window.__hasAudio=()=>{const v=new Float32Array(meter.fftSize);meter.getFloatTimeDomainData(v);return v.some(n=>Math.abs(n)>.01);};}); try{await b.waitForFunction(()=>window.__hasAudio(),null,{timeout:8000});}catch(error){console.log('AUDIO SOURCE',JSON.stringify(await a.evaluate(()=>({state:window.__audio.state,time:window.__audio.currentTime,sampleRate:window.__audio.sampleRate,tracks:window.__stream.getAudioTracks().map(t=>({enabled:t.enabled,state:t.readyState})), pcs:[...window.__test.room.watchers.values()].map(w=>({id:w.id,senders:w.call.peerConnection.getSenders().map(s=>({kind:s.track?.kind,ready:s.track?.readyState})),sdp:w.call.peerConnection.localDescription.sdp.split('\r\n').filter(line=>/^m=|^a=(sendrecv|sendonly|recvonly|inactive)/.test(line))}))})),null,2));console.log('AUDIO RECEIVE',await b.evaluate(async()=>{let audio;const stats=await window.__test.room.call.peerConnection.getStats();stats.forEach(s=>{if(s.type==='inbound-rtp'&&s.kind==='audio')audio={bytes:s.bytesReceived,level:s.audioLevel,energy:s.totalAudioEnergy};});return{audio,tracks:window.__test.room.remoteStream.getAudioTracks().map(t=>({enabled:t.enabled,muted:t.muted,state:t.readyState})),context:window.__meter.context.state,sdp:window.__test.room.call.peerConnection.localDescription.sdp.split('\r\n').filter(line=>/^m=|^a=(sendrecv|sendonly|recvonly|inactive)/.test(line)),element:{tracks:document.getElementById('remote-audio').srcObject?.getTracks().length,state:document.getElementById('remote-audio').readyState}};}));throw error;}
  await publish(b,1080,60); await wait(a,()=>document.getElementById('remote').videoWidth===1920); assert.equal(await a.evaluate(()=>!!window.__test.room.stream),true); console.log('PASS: quem assiste também transmite na mesma sala; duas telas simultâneas.');
  await a.evaluate(()=>window.__test.room.stopBroadcast()); await wait(b,()=>window.__test.room.members.get(window.__test.room.identity.id)?.caps===null); assert.equal(await b.evaluate(()=>!!window.__test.room.stream),true);assert.equal(await a.evaluate(()=>window.__test.room.active),true); await wait(c,()=>window.__test.room.watching!==window.__test.room.identity.id);console.log('PASS: encerrar apenas uma tela mantém sala e outra transmissão.'); await wait(b,()=>document.getElementById('viewer-stage').dataset.mode==='local'&&document.getElementById('remote').videoWidth===1920); assert.equal(await b.locator('#remote-empty').isVisible(),false); console.log('PASS: quando resta só sua transmissão, a prévia ocupa o centro automaticamente.');
@@ -58,13 +68,28 @@ async function publish(page, height = 720, fps = 30) {
  await wait(c,()=>document.querySelector('#saved-list .room-link')?.dataset.status==='online');
  console.log('PASS: falha da consulta mostra Sem conexão e se recupera, sem afetar a sala ativa.');
  const protocol=require('../src/room-protocol.cjs'),bad=protocol.readInvite(invite);bad.secret=(bad.secret[0]==='a'?'b':'a')+bad.secret.slice(1);
- await c.click('#join-card');await c.locator('#join-invite').fill(protocol.inviteFor(bad,'Convite inválido'));await c.click('#join-room');await wait(c,()=>!document.getElementById('notice').hidden);assert.equal(await c.evaluate(()=>window.__test.room.active),false);assert.equal(await a.evaluate(()=>window.__test.room.members.size),2);console.log('PASS: convite com chave incorreta não entra na sala.');
+ await c.click('#join-card');await c.locator('#join-invite').fill(protocol.inviteFor(bad,'Convite inválido'));await c.click('#join-room');await wait(c,()=>!document.getElementById('notice').hidden);assert.equal(await c.evaluate(()=>window.__test.room.active),false);assert.equal(await a.evaluate(()=>window.__test.room.members.size),2);console.log('PASS: convite com chave incorreta não entra na sala.');await c.locator('#join-dialog .close-dialog').click();
  await b.evaluate(()=>window.__test.room.leave());await a.evaluate(()=>window.__test.room.leave());
  await c.evaluate(()=>window.__test.presence.refresh());
  await wait(c,()=>document.querySelector('#saved-list .room-link')?.dataset.status==='offline');
  assert.equal(await c.locator('#saved-list .room-link small').textContent(),'Offline');
  assert.equal(await c.locator('#saved-list .room-link.is-offline .room-symbol.offline').count(),1);
  console.log('PASS: sala fechada muda para Offline em cinza, sem alterar os convites salvos.');
+ assert.equal(await c.locator('#saved-list .room-link').isDisabled(),true);
+ await wait(a,()=>document.querySelector('#saved-list .room-link')?.dataset.status==='offline');
+ assert.equal(await a.locator('#saved-list .room-link').isEnabled(),true);
+ assert.equal(await a.locator('#saved-list .room-link small').textContent(),'Offline · Sua sala');
+ await a.locator('#saved-list .room-link').click();
+ await wait(a,()=>window.__test.room.active&&window.__test.room.members.size===1);
+ assert.equal(await a.evaluate(()=>window.__test.room.identity.id),protocol.readInvite(invite).id);
+ await wait(c,()=>!window.__test.presence.running);
+ await c.evaluate(()=>window.__test.presence.refresh());
+ await wait(c,()=>document.querySelector('#saved-list .room-link')?.dataset.status==='online');
+ assert.equal(await c.locator('#saved-list .room-link').isEnabled(),true);
+ await c.locator('#saved-list .room-link').click();
+ await wait(a,()=>window.__test.room.members.size===2);
+ console.log('PASS: dono reabre sua sala Offline pelo mesmo convite; convidados voltam a poder entrar após ficar Online.');
+ await c.evaluate(()=>window.__test.room.leave());await a.evaluate(()=>window.__test.room.leave());
  console.log('ALL ROOM CHECKS PASSED');
  }finally{for(const app of apps.reverse())await app.close().catch(()=>{});server?.close();fs.rmSync(temp,{recursive:true,force:true});execFileSync(process.execPath,['scripts/build.cjs'],{cwd:root,env:{...process.env,ENTRETELAS_TEST:''}});}
 })().then(()=>process.exit(0),error=>{console.error(error);process.exit(1);});
