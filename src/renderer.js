@@ -2,10 +2,13 @@ import { Room } from './room.js';
 import { readInvite, capsFor, HEIGHTS, RATES } from './room-protocol.cjs';
 import { normalizeVideo } from './video.js';
 import { filteredAudio } from './filtered-audio.js';
+import { RoomPresence } from './presence.js';
 const $ = id => document.getElementById(id);
 const runtime = await window.desktop.runtime();
 let prefs = await window.desktop.preferences('read');
 const room = new Room(runtime.peerOptions);
+const presence = new RoomPresence(runtime.peerOptions);
+presence.addEventListener('change', () => savedRooms());
 let acquireAudio = filteredAudio;
 let view = 'home';
 let busy = false, captureCleanup, sharedAudio, captureStats, watchingCaps, playbackStall = 0, lastPlaybackTime = 0;
@@ -28,19 +31,26 @@ function controls() {
   $('active-room-name').textContent = room.roomName || '';
   $('active-room-status').textContent = room.stream ? 'Sua transmissão continua ao vivo.' : 'Você continua conectado à sala.';
   $('share').disabled = busy || !!room.stream; $('empty-share').disabled = busy || !!room.stream;
+  $('share').textContent = room.stream ? '✓ Compartilhando tela' : '＋ Compartilhar tela';
   for (const id of ['create-room', 'join-room', 'start-sharing']) $(id).disabled = busy;
   window.desktop.activity(active || busy).catch(() => {});
   $('my-name').disabled = active;
-  savedRooms();
+  presence.track(prefs.rooms, room.active && room.members.has(room.id) ? room.identity.id : null);
+  savedRooms(); renderStage();
 }
 function savedRooms() {
   $('saved-list').replaceChildren(); $('saved-empty').hidden = !!prefs.rooms.length;
   for (const saved of prefs.rooms) {
     const connected = room.active && room.identity?.id === saved.id;
-    const button = document.createElement('button'); button.className = `room-link${connected && view === 'room' ? ' selected' : ''}`;
-    const icon = document.createElement('span'); icon.className = 'room-symbol'; icon.textContent = '▱';
+    const status = connected && room.members.has(room.id) ? 'online' : presence.state(saved.id);
+    const online = status === 'online';
+    const button = document.createElement('button'); button.className = `room-link ${online ? 'is-online' : 'is-offline'}${connected && view === 'room' ? ' selected' : ''}`;
+    button.dataset.roomId = saved.id; button.dataset.status = status;
+    const icon = document.createElement('span'); icon.className = `room-symbol ${online ? 'online' : 'offline'}`; icon.setAttribute('aria-hidden', 'true');
     const text = document.createElement('div'), title = document.createElement('strong'), subtitle = document.createElement('small');
-    title.textContent = saved.name; subtitle.textContent = connected ? (room.stream ? 'Transmitindo ao vivo' : 'Conectado') : (saved.owned ? 'Sua sala' : 'Convite salvo'); text.append(title, subtitle); button.append(icon, text);
+    title.textContent = saved.name; subtitle.textContent = online ? 'Online' : status === 'checking' ? 'Verificando…' : status === 'unknown' ? 'Sem conexão' : 'Offline';
+    button.title = online ? 'Sala disponível' : status === 'offline' ? 'Sala indisponível. Quem criou precisa mantê-la aberta; a rede também pode impedir a conexão.' : 'Consultando a disponibilidade da sala.';
+    text.append(title, subtitle); button.append(icon, text);
     button.onclick = () => enterSaved(saved); button.disabled = busy; $('saved-list').append(button);
   }
 }
@@ -95,6 +105,30 @@ async function chooseSource() {
   });
 }
 function stopCapture() { const cleanup = captureCleanup; captureCleanup = null; sharedAudio = null; cleanup?.(); $('preview').srcObject = null; $('local-card').hidden = true; controls(); updateVolume(); }
+function renderStage() {
+  const watching = !!room.watching;
+  const local = !watching && !!room.stream;
+  const stream = watching ? room.remoteStream : room.stream;
+  if ($('remote').__sourceStream !== stream) {
+    $('remote').__sourceStream = stream;
+    $('remote').srcObject = stream ? new MediaStream(stream.getVideoTracks()) : null;
+    if (stream) $('remote').play().catch(() => {});
+  }
+  $('remote-empty').hidden = watching || local;
+  $('viewer-stage').dataset.mode = watching ? 'remote' : local ? 'local' : 'empty';
+  $('viewer-stage').classList.toggle('local-preview', local);
+  $('volume-control').hidden = !watching;
+  $('watch-quality').hidden = !watching;
+  $('local-preview-label').hidden = !local;
+  if (local) {
+    $('watch-title').textContent = 'Sua transmissão'; $('watch-live').hidden = false;
+    $('watch-status').textContent = `${room.caps.height}p · ${room.caps.fps} FPS · prévia sem som`;
+    $('viewer-stats').textContent = 'Você está compartilhando. Seus amigos podem assistir à sua tela.';
+  } else if (!watching) {
+    $('watch-title').textContent = 'A sala é de vocês.'; $('watch-live').hidden = true;
+    $('watch-status').textContent = 'Escolha uma transmissão'; $('viewer-stats').textContent = 'Pronto para assistir.';
+  }
+}
 function audioStatus(status) {
   room.reportAudio(status.state);
   const recovering = status.state !== 'ready'; $('audio-status').classList.toggle('recovering', recovering);
@@ -158,16 +192,16 @@ function renderMembers() {
 }
 room.addEventListener('joined', async ({ detail }) => {
   view = 'room'; $('room-name').textContent = detail.name; controls();
-  try { prefs = await window.desktop.preferences('remember', { invite: detail.invite, name: detail.name, profile: 'smooth' }); savedRooms(); } catch (error) { notice(error.message); }
+  try { prefs = await window.desktop.preferences('remember', { invite: detail.invite, name: detail.name, profile: 'smooth' }); presence.track(prefs.rooms, room.identity.id); savedRooms(); } catch (error) { notice(error.message); }
 });
 room.addEventListener('members', renderMembers);
 room.addEventListener('notice', event => notice(event.detail));
 room.addEventListener('left', () => { view = 'home'; stopCapture(); controls(); });
 room.addEventListener('broadcast', ({ detail }) => { if (!detail.active) stopCapture(); controls(); });
-room.addEventListener('watching', ({ detail }) => { $('watch-title').textContent = `Tela de ${detail.name}`; $('watch-status').textContent = 'Conectando…'; $('watch-live').hidden = false; qualityOptions(detail.caps); renderMembers(); });
+room.addEventListener('watching', ({ detail }) => { renderStage(); $('watch-title').textContent = `Tela de ${detail.name}`; $('watch-status').textContent = 'Conectando…'; $('watch-live').hidden = false; qualityOptions(detail.caps); renderMembers(); });
 room.addEventListener('quality', ({ detail }) => { qualityOptions(detail.caps, detail.quality); $('watch-status').textContent = `${detail.quality.height}p · ${detail.quality.fps} FPS`; });
-room.addEventListener('stream', ({ detail }) => { $('remote').srcObject = new MediaStream(detail.stream.getVideoTracks()); $('remote-empty').hidden = true; updateVolume(); $('remote').play().catch(() => {}); detachStreamListeners(); const refresh = () => { if (room.remoteStream === detail.stream) resetAudioPlayback(); }; detail.stream.addEventListener('addtrack', refresh); detail.stream.addEventListener('removetrack', refresh); detachStreamListeners = () => { detail.stream.removeEventListener('addtrack', refresh); detail.stream.removeEventListener('removetrack', refresh); }; resetAudioPlayback(); lastPlaybackTime = 0; playbackStall = 0; });
-room.addEventListener('unwatched', () => { $('remote').srcObject = null; $('remote-audio').srcObject = null; $('remote-empty').hidden = false; detachStreamListeners(); detachStreamListeners = () => {}; $('watch-title').textContent = 'A sala é de vocês.'; $('watch-live').hidden = true; $('watch-status').textContent = 'Escolha uma transmissão'; $('viewer-stats').textContent = 'Pronto para assistir.'; for (const id of ['watch-height', 'watch-fps']) $(id).disabled = true; renderMembers(); });
+room.addEventListener('stream', ({ detail }) => { renderStage(); updateVolume(); detachStreamListeners(); const refresh = () => { if (room.remoteStream === detail.stream) resetAudioPlayback(); }; detail.stream.addEventListener('addtrack', refresh); detail.stream.addEventListener('removetrack', refresh); detachStreamListeners = () => { detail.stream.removeEventListener('addtrack', refresh); detail.stream.removeEventListener('removetrack', refresh); }; resetAudioPlayback(); lastPlaybackTime = 0; playbackStall = 0; });
+room.addEventListener('unwatched', () => { $('remote-audio').srcObject = null; detachStreamListeners(); detachStreamListeners = () => {}; for (const id of ['watch-height', 'watch-fps']) $(id).disabled = true; renderStage(); renderMembers(); });
 room.addEventListener('repair-audio', () => sharedAudio?.repair().catch(() => {}));
 room.addEventListener('stats', ({ detail }) => { if (detail.id === 'receive') $('viewer-stats').textContent = `${detail.width}×${detail.height} · ${detail.fps} FPS recebidos · ${detail.mbps.toFixed(1)} Mbps · ${detail.rtt} ms`; });
 let audioResetting = false, audioLastTime = 0, audioStall = 0;
@@ -205,5 +239,5 @@ window.desktop.onInvite(value => { $('join-invite').value = value; dialog('join-
 if (runtime.invite) { $('join-invite').value = runtime.invite; dialog('join-dialog'); }
 updateVolume(); controls();
 if (prefs.storageError) notice(prefs.storageError);
-window.addEventListener('beforeunload', () => { clearInterval(playbackHealth); room.destroy(); });
-if (runtime.testing) window.__test = { room, normalizeVideo, filteredAudio, getAudio: () => sharedAudio, setNativePicker: value => { runtime.nativePicker = value; }, setAudioFactory: factory => { acquireAudio = factory; }, getPrefs: () => prefs };
+window.addEventListener('beforeunload', () => { clearInterval(playbackHealth); presence.destroy(); room.destroy(); });
+if (runtime.testing) window.__test = { room, presence, RoomPresence, normalizeVideo, filteredAudio, getAudio: () => sharedAudio, setNativePicker: value => { runtime.nativePicker = value; }, setAudioFactory: factory => { acquireAudio = factory; }, getPrefs: () => prefs };

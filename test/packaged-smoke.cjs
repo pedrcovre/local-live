@@ -1,5 +1,9 @@
 const {_electron}=require('playwright'),path=require('node:path'),assert=require('node:assert/strict'),fs=require('node:fs');
 const root=path.resolve(__dirname,'..');
+const metadata=JSON.parse(require('node:child_process').execFileSync('/usr/bin/plutil',['-convert','json','-o','-',path.join(root,'release/mac-arm64/Local Live.app/Contents/Info.plist')],{encoding:'utf8'}));
+assert.equal(metadata.CFBundleIdentifier,'local.entretelas.app');
+for(const key of ['NSCameraUsageDescription','NSMicrophoneUsageDescription','NSBluetoothAlwaysUsageDescription','NSBluetoothPeripheralUsageDescription'])assert.equal(metadata[key],undefined);
+for(const key of ['NSScreenCaptureUsageDescription','NSAudioCaptureUsageDescription','NSLocalNetworkUsageDescription'])assert.ok(metadata[key]);
 async function check(locked=false){
  const profile=fs.mkdtempSync('/private/tmp/local-live-packaged-');
  const file=path.join(profile,'local-live-preferences.json');
@@ -18,6 +22,7 @@ async function check(locked=false){
   assert.equal(await page.evaluate(()=>!!window.__test),false);
   assert.equal(await app.evaluate(({app})=>app.getVersion()),require('../package.json').version);
   assert.equal(await page.title(),'Local Live');
+  assert.deepEqual(await page.evaluate(async()=>Promise.all(['camera','microphone'].map(async name=>(await navigator.permissions.query({name})).state))),['denied','denied']);
   if(locked){assert.match(await page.locator('#notice-text').textContent(),/dados foram preservados/);assert.equal(fs.readFileSync(file,'utf8'),original);}
   await page.click('#join-card');await page.locator('#join-invite').fill('invalid');await page.click('#join-room');
   await page.waitForFunction(()=>!document.getElementById('notice').hidden);

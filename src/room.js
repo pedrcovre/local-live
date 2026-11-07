@@ -50,14 +50,22 @@ export class Room extends EventTarget {
     } catch (error) { this.leave(); throw error; }
   }
   accept(conn) {
-    if (!this.isOwner || this.members.size + this.pending.size >= 12) return conn.close();
-    this.pending.add(conn); let authenticated = false;
+    if (!this.isOwner || this.pending.size >= 32) return conn.close();
+    this.pending.add(conn); let authenticated = false, probing = false;
     const expiry = this.later(() => { if (!authenticated) { this.pending.delete(conn); conn.close(); } }, 12000);
     conn.on('data', data => {
-      if (!this.active || !data || typeof data !== 'object') return;
+      if (!this.active || probing || !data || typeof data !== 'object') return;
       if (!authenticated) {
+        if (data.type === 'presence') {
+          probing = true; this.pending.delete(conn); clearTimeout(expiry); this.timers.delete(expiry);
+          const online = data.version === 2 && data.secret === this.identity.secret && typeof data.nonce === 'string' && data.nonce.length <= 40;
+          send(conn, { type: 'presence', nonce: online ? data.nonce : '', online });
+          this.later(() => conn.close(), 100);
+          return;
+        }
+        if (this.members.size >= 12) { conn.close(); return; }
         if (data.type !== 'hello' || data.version !== 2 || data.secret !== this.identity.secret || !cleanName(data.name) || !validId(conn.peer) || this.members.has(conn.peer)) { send(conn, { type: 'denied', message: 'Convite inválido ou aplicativo desatualizado.' }); conn.close(); return; }
-        authenticated = true; clearTimeout(expiry); this.pending.delete(conn);
+        authenticated = true; clearTimeout(expiry); this.timers.delete(expiry); this.pending.delete(conn);
         this.members.set(conn.peer, { id: conn.peer, name: cleanName(data.name), caps: null, conn });
         send(conn, { type: 'welcome', name: this.roomName, members: this.roster() }); this.broadcastRoster(); return;
       }

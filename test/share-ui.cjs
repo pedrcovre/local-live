@@ -56,6 +56,16 @@ async function assertCapture(page) {
     await host.click('#start-sharing');
     await host.waitForFunction(() => window.__test.room.stream?.getAudioTracks().length === 1);
     await host.waitForFunction(() => document.getElementById('preview').videoHeight === 720);
+    await host.waitForFunction(() => document.getElementById('remote').videoHeight === 720);
+    assert.equal(await host.locator('#viewer-stage').getAttribute('data-mode'), 'local');
+    assert.equal(await host.locator('#remote-empty').isVisible(), false);
+    assert.equal(await host.locator('#volume-control').isVisible(), false);
+    assert.equal(await host.locator('#watch-quality').isVisible(), false);
+    assert.equal(await host.locator('#watch-title').textContent(), 'Sua transmissão');
+    assert.equal(await host.evaluate(() => document.getElementById('remote').muted && !document.getElementById('remote-audio').srcObject), true);
+    assert.match(await host.locator('#share').textContent(), /Compartilhando/);
+    await host.screenshot({ path: path.join(root, 'test/local-preview.png'), fullPage: true });
+    console.log('PASS: sua tela ocupa o player central, sem convite para compartilhar novamente e sem reproduzir o próprio áudio.');
     assert.equal(await host.locator('#audio-mode').count(), 0);
     assert.deepEqual(await host.evaluate(() => ({ height: window.__test.room.caps.height, fps: window.__test.room.caps.fps })), { height: 720, fps: 60 });
     assert.equal(await host.evaluate(() => window.__captureOptions.audio), false);
@@ -105,6 +115,7 @@ async function assertCapture(page) {
 
     await host.click('#stop-sharing');
     await host.waitForFunction(() => !window.__test.room.stream && window.__audioContext.state === 'closed');
+    assert.equal(await host.locator('#viewer-stage').getAttribute('data-mode'), 'empty');
     assert.equal(await host.evaluate(() => window.__test.room.active), true);
     assert.equal(await host.evaluate(() => window.__original.tracks.every(track => track.readyState === 'ended')), true);
     await viewer.click('#leave-room');

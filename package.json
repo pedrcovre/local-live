@@ -1,7 +1,7 @@
 {
   "name": "local-live",
   "productName": "Local Live",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "private": true,
   "description": "Compartilhamento privado de tela entre amigos, por WebRTC.",
   "author": "Local Live",

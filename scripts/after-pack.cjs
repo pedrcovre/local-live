@@ -13,6 +13,22 @@ module.exports = async context => {
   const app = path.join(staging, 'Local Live.app');
   execFileSync('/usr/bin/ditto', [destination, app]);
   try {
+  // Electron's template advertises camera/microphone/Bluetooth capabilities.
+  // Local Live does not use them. Remove their descriptions from the app and
+  // helpers before signing; retain screen, system audio and local networking.
+  const removeUnusedDescriptions = directory => {
+    for (const item of fs.readdirSync(directory, { withFileTypes: true })) {
+      const file = path.join(directory, item.name);
+      if (item.isDirectory()) removeUnusedDescriptions(file);
+      else if (item.name === 'Info.plist') {
+        for (const key of ['NSCameraUsageDescription', 'NSMicrophoneUsageDescription', 'NSBluetoothAlwaysUsageDescription', 'NSBluetoothPeripheralUsageDescription']) {
+          const probe = require('node:child_process').spawnSync('/usr/libexec/PlistBuddy', ['-c', `Print :${key}`, file]);
+          if (probe.status === 0) execFileSync('/usr/libexec/PlistBuddy', ['-c', `Delete :${key}`, file]);
+        }
+      }
+    }
+  };
+  removeUnusedDescriptions(app);
   // Finder can attach presentation metadata to generated bundles in Documents.
   // Remove only those two build-artifact attributes; preserve security attributes.
   for (const attribute of ['com.apple.FinderInfo', 'com.apple.ResourceFork']) {

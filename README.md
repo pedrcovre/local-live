@@ -18,6 +18,8 @@ Salas privadas para compartilhar tela e áudio entre amigos.<br>
 Crie uma sala com um nome, copie o convite e envie aos amigos. A entrada é direta. Qualquer participante pode compartilhar uma tela e assistir à transmissão de outra pessoa, tudo no mesmo lugar.
 
 - **Salas salvas:** entre uma vez e volte pela barra lateral.
+- **Disponibilidade real:** indicador verde para **Online**; salas **Offline** ficam cinza. A consulta periódica não entra na sala nem recebe mídia. Ao iniciar, **Verificando…** evita mostrar um estado inventado; falhas da sinalização aparecem como **Sem conexão**. Uma rede que bloqueia P2P pode tornar uma sala indisponível mesmo com o criador conectado.
+- **Sua tela no centro:** quando você está transmitindo sem assistir a outra tela, a prévia aparece no player principal, sempre sem reproduzir o próprio áudio. Os controles de qualidade/volume aparecem ao assistir a outra pessoa.
 - **Compartilhamento independente:** encerrar sua tela mantém a sala e as outras transmissões.
 - **Navegação sem interrupção:** abrir o Início mantém a sala, o compartilhamento e a transmissão assistida. Volte pelo botão **Voltar à sala** ou pela sala na lateral. Use **Sair** para desconectar.
 - **Áudio incluído:** o jogo e os outros sons acompanham a tela; o Discord desktop é filtrado.
@@ -27,6 +29,10 @@ Crie uma sala com um nome, copie o convite e envie aos amigos. A entrada é dire
 - **Interface leve:** tipografia do sistema, cores claras, espaços generosos e controles com rótulos diretos.
 
 ![Uma sala ao vivo no Local Live](docs/screenshots/sala.png)
+
+Quando só a sua tela está sendo compartilhada, ela aparece no centro:
+
+![Sua transmissão no painel principal](docs/screenshots/minha-tela.png)
 
 As imagens mostram a interface real com vídeo de demonstração gerado para a documentação. Nenhuma tela pessoal ou chamada foi usada.
 
@@ -93,7 +99,13 @@ Não há TURN, VPN geral ou acesso remoto aos computadores. Algumas combinaçõe
 
 ### Permissões e avisos do sistema
 
-Transmitir exige gravação de tela e captura de áudio do sistema. Assistir não pede câmera, microfone ou captura da tela. Os pacotes não têm certificado comercial Windows nem notarização Apple; o sistema pode mostrar aviso de aplicativo desconhecido. Mantenha as proteções do sistema ativadas e confira a origem do download.
+Transmitir exige acesso à tela e ao áudio do sistema; conexões P2P podem exigir rede local. As APIs de captura são acionadas ao escolher compartilhar. Câmera e microfone são recusados pelo aplicativo; as descrições padrão de câmera, microfone e Bluetooth foram removidas do pacote Mac. Assistir e consultar disponibilidade não iniciam captura.
+
+**Os alertas de aplicativo desconhecido ainda podem aparecer.** Este projeto não dispõe de certificados de distribuição. No Mac, o caminho oficial é Developer ID e notarização; a assinatura local usada nestes pacotes não substitui essa verificação. [Apple: distribuição com Developer ID](https://developer.apple.com/developer-id/).
+
+No Windows, assinatura reconhecida permite identificar o editor, mas um programa novo ainda pode receber alerta de reputação; distribuição pela Microsoft Store segue outro fluxo de confiança. [Microsoft: reputação do SmartScreen](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation).
+
+O Chaves do macOS protege os convites salvos. Sem uma assinatura consistente reconhecida, atualizações podem provocar uma nova solicitação de acesso ao Chaves. [Electron: armazenamento seguro](https://www.electronjs.org/docs/latest/api/safe-storage). A seleção de tela e os consentimentos do sistema continuam sob controle do macOS. Instale uma única cópia em **Aplicativos**, feche a anterior antes de atualizar e evite alternar entre cópias extraídas em Downloads.
 
 ## Desenvolvimento
 

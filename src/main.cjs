@@ -32,7 +32,7 @@ function trusted(frame) { return frame && frame.url === entry && frame === win?.
 function guard(event) { if (!trusted(event.senderFrame)) throw new Error('Origem não autorizada.'); }
 app.whenReady().then(() => {
   let prefs;
-  if (app.isPackaged) app.setAsDefaultProtocolClient('locallive');
+  if (app.isPackaged && !app.isDefaultProtocolClient('locallive')) app.setAsDefaultProtocolClient('locallive');
   powerMonitor.on('resume', () => audio?.restart());
   ipcMain.handle('media-active', (event, active) => { guard(event); keepActive(active === true); });
   audio = new DiscordAudio({ factory: () => nativeFactory(app), processes: () => discordProcesses(app), emit: packet => { if (win && !win.isDestroyed()) win.webContents.send('audio-packet', packet); } });
@@ -51,8 +51,9 @@ app.whenReady().then(() => {
     if (action === 'rotate') return store.rotate();
     throw new Error('Operação inválida.');
   });
-  session.defaultSession.setPermissionCheckHandler((wc, permission) => wc === win?.webContents && wc.getURL() === entry && ['media', 'display-capture', 'fullscreen'].includes(permission));
-  session.defaultSession.setPermissionRequestHandler((wc, permission, callback) => callback(wc === win?.webContents && wc.getURL() === entry && ['media', 'display-capture', 'fullscreen'].includes(permission)));
+  // The app captures displays and native system audio, never a camera or microphone.
+  session.defaultSession.setPermissionCheckHandler((wc, permission) => wc === win?.webContents && wc.getURL() === entry && ['display-capture', 'fullscreen'].includes(permission));
+  session.defaultSession.setPermissionRequestHandler((wc, permission, callback) => callback(wc === win?.webContents && wc.getURL() === entry && ['display-capture', 'fullscreen'].includes(permission)));
   session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
     const chosen = selection;
     selection = null;
