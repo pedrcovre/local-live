@@ -3,8 +3,11 @@ const root=path.resolve(__dirname,'..');
 async function check(locked=false){
  const profile=fs.mkdtempSync('/private/tmp/local-live-packaged-');
  const file=path.join(profile,'local-live-preferences.json');
- const original=JSON.stringify({encrypted:true,data:Buffer.from('not-a-valid-ciphertext').toString('base64')});
+ const original='{invalid-saved-preferences';
+ // Use an isolated existing profile so this UI check never accesses the user's
+ // macOS Keychain. Encryption failures are covered by preferences.test.cjs.
  if(locked)fs.writeFileSync(file,original);
+ else new (require('../src/preferences.cjs').Preferences)(profile);
  let app;
  try{
   app=await _electron.launch({executablePath:path.join(root,'release/mac-arm64/Local Live.app/Contents/MacOS/Local Live'),args:['--user-data-dir='+profile],timeout:30000});
@@ -19,7 +22,7 @@ async function check(locked=false){
   await page.click('#join-card');await page.locator('#join-invite').fill('invalid');await page.click('#join-room');
   await page.waitForFunction(()=>!document.getElementById('notice').hidden);
   assert.match(await page.locator('#notice-text').textContent(),/convite/);
-  console.log('PASS: pacote Mac abre e valida convites com perfil '+(locked?'criptografado indisponível, preservando os dados.':'limpo; modo de teste desabilitado.'));
+  console.log('PASS: pacote Mac abre e valida convites com perfil '+(locked?'ilegível, preservando os dados.':'temporário; modo de teste desabilitado.'));
  }finally{await app?.close();fs.rmSync(profile,{recursive:true,force:true});}
 }
 (async()=>{await check();await check(true);})().catch(error=>{console.error(error);process.exitCode=1;});

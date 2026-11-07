@@ -10,11 +10,12 @@
   <p id="saved-empty" class="side-hint">Suas salas ficam aqui.<br>Entre uma vez. Volte quando quiser.</p>
   <button id="add-invite" class="add-room"><span>＋</span> Entrar com convite</button>
   <div class="profile"><span id="my-avatar" class="avatar">V</span><div><label for="my-name">SEU NOME</label><input id="my-name" maxlength="40" value="Visitante" aria-label="Seu nome"></div><span class="online-dot" title="Local Live"></span></div>
-  <div class="sidebar-footer">Local Live <span>0.3.0</span></div>
+  <div class="sidebar-footer">Local Live <span>0.3.1</span></div>
 </aside>
 <main>
   <div id="notice" class="notice" role="status" hidden><span id="notice-text"></span><button id="dismiss-notice" class="icon-button" aria-label="Fechar aviso">×</button></div>
   <section id="home-view">
+    <div id="active-room" class="active-room" hidden><span class="online-dot"></span><div><strong id="active-room-name"></strong><p id="active-room-status"></p></div><button id="resume-room" class="secondary">Voltar à sala →</button></div>
     <header class="home-header"><p class="eyebrow">UM ESPAÇO PARA O SEU GRUPO</p><h1>É melhor assistir<br>juntos.</h1><p>Abra uma sala, compartilhe sua tela e deixe a conversa acontecer.</p></header>
     <div class="home-actions"><button id="create-card" class="home-card"><span class="large-icon">＋</span><h2>Crie uma sala</h2><p>Dê um nome e envie o convite.<br>Qualquer amigo na sala pode compartilhar.</p><span class="card-link">Criar sala <b>↗</b></span></button><button id="join-card" class="home-card"><span class="large-icon neutral">↗</span><h2>Seu grupo já está lá?</h2><p>Cole o convite de um amigo.<br>A entrada é direta, sem pedir autorização.</p><span class="card-link">Entrar em uma sala <b>→</b></span></button></div>
     <div class="home-note"><span>◉</span><p><strong>Sua tela, seu grupo.</strong> Tela inteira ou janela, áudio incluído e até 1080p a 144 FPS. Cada pessoa escolhe como assistir.</p></div>

@@ -7,6 +7,7 @@ const runtime = await window.desktop.runtime();
 let prefs = await window.desktop.preferences('read');
 const room = new Room(runtime.peerOptions);
 let acquireAudio = filteredAudio;
+let view = 'home';
 let busy = false, captureCleanup, sharedAudio, captureStats, watchingCaps, playbackStall = 0, lastPlaybackTime = 0;
 let volume = .8, rememberedVolume = .8;
 let detachStreamListeners = () => {};
@@ -20,7 +21,12 @@ function name() { return $('my-name').value.trim().slice(0, 40) || 'Visitante'; 
 function updateProfile() { $('my-avatar').textContent = initials(name()); window.desktop.preferences('profile', { name: name() }).catch(error => notice(error.message)); }
 function controls() {
   const active = !!room.active;
-  $('home-view').hidden = active; $('room-view').hidden = !active;
+  const showingRoom = active && view === 'room';
+  $('home-view').hidden = showingRoom; $('room-view').hidden = !showingRoom;
+  $('home').classList.toggle('active', !showingRoom);
+  $('active-room').hidden = !active;
+  $('active-room-name').textContent = room.roomName || '';
+  $('active-room-status').textContent = room.stream ? 'Sua transmissão continua ao vivo.' : 'Você continua conectado à sala.';
   $('share').disabled = busy || !!room.stream; $('empty-share').disabled = busy || !!room.stream;
   for (const id of ['create-room', 'join-room', 'start-sharing']) $(id).disabled = busy;
   window.desktop.activity(active || busy).catch(() => {});
@@ -30,10 +36,11 @@ function controls() {
 function savedRooms() {
   $('saved-list').replaceChildren(); $('saved-empty').hidden = !!prefs.rooms.length;
   for (const saved of prefs.rooms) {
-    const button = document.createElement('button'); button.className = `room-link${room.active && room.identity?.id === saved.id ? ' selected' : ''}`;
+    const connected = room.active && room.identity?.id === saved.id;
+    const button = document.createElement('button'); button.className = `room-link${connected && view === 'room' ? ' selected' : ''}`;
     const icon = document.createElement('span'); icon.className = 'room-symbol'; icon.textContent = '▱';
     const text = document.createElement('div'), title = document.createElement('strong'), subtitle = document.createElement('small');
-    title.textContent = saved.name; subtitle.textContent = saved.owned ? 'Sua sala' : 'Convite salvo'; text.append(title, subtitle); button.append(icon, text);
+    title.textContent = saved.name; subtitle.textContent = connected ? (room.stream ? 'Transmitindo ao vivo' : 'Conectado') : (saved.owned ? 'Sua sala' : 'Convite salvo'); text.append(title, subtitle); button.append(icon, text);
     button.onclick = () => enterSaved(saved); button.disabled = busy; $('saved-list').append(button);
   }
 }
@@ -43,7 +50,7 @@ async function leaveCurrent() {
   room.leave(); return true;
 }
 async function enterSaved(saved) {
-  if (room.active && room.identity?.id === saved.id) return;
+  if (room.active && room.identity?.id === saved.id) { view = 'room'; controls(); return; }
   if (!await leaveCurrent()) return;
   busy = true; controls(); notice();
   try { if (saved.owned) await room.create(readInvite(saved.invite), saved.name, name()); else await room.join(saved.invite, name()); }
@@ -51,7 +58,8 @@ async function enterSaved(saved) {
 }
 $('new-room').onclick = $('create-card').onclick = () => { $('new-room-name').value = `Sala de ${name()}`; dialog('create-dialog'); };
 $('add-invite').onclick = $('join-card').onclick = () => dialog('join-dialog');
-$('home').onclick = async () => { if (await leaveCurrent()) controls(); };
+$('home').onclick = () => { view = 'home'; controls(); };
+$('resume-room').onclick = () => { if (room.active) { view = 'room'; controls(); } };
 $('my-name').onchange = updateProfile; $('my-avatar').textContent = initials(name());
 $('dismiss-notice').onclick = () => notice();
 for (const button of document.querySelectorAll('.close-dialog')) button.onclick = () => button.closest('dialog').close();
@@ -149,12 +157,12 @@ function renderMembers() {
   queueMicrotask(() => { if (room.active && !room.watching) { const candidate = [...room.members.values()].find(member => member.id !== room.id && member.caps); if (candidate) room.watch(candidate.id, candidate.caps); } });
 }
 room.addEventListener('joined', async ({ detail }) => {
-  $('room-name').textContent = detail.name; controls();
+  view = 'room'; $('room-name').textContent = detail.name; controls();
   try { prefs = await window.desktop.preferences('remember', { invite: detail.invite, name: detail.name, profile: 'smooth' }); savedRooms(); } catch (error) { notice(error.message); }
 });
 room.addEventListener('members', renderMembers);
 room.addEventListener('notice', event => notice(event.detail));
-room.addEventListener('left', () => { stopCapture(); controls(); });
+room.addEventListener('left', () => { view = 'home'; stopCapture(); controls(); });
 room.addEventListener('broadcast', ({ detail }) => { if (!detail.active) stopCapture(); controls(); });
 room.addEventListener('watching', ({ detail }) => { $('watch-title').textContent = `Tela de ${detail.name}`; $('watch-status').textContent = 'Conectando…'; $('watch-live').hidden = false; qualityOptions(detail.caps); renderMembers(); });
 room.addEventListener('quality', ({ detail }) => { qualityOptions(detail.caps, detail.quality); $('watch-status').textContent = `${detail.quality.height}p · ${detail.quality.fps} FPS`; });

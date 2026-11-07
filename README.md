@@ -19,6 +19,7 @@ Crie uma sala com um nome, copie o convite e envie aos amigos. A entrada é dire
 
 - **Salas salvas:** entre uma vez e volte pela barra lateral.
 - **Compartilhamento independente:** encerrar sua tela mantém a sala e as outras transmissões.
+- **Navegação sem interrupção:** abrir o Início mantém a sala, o compartilhamento e a transmissão assistida. Volte pelo botão **Voltar à sala** ou pela sala na lateral. Use **Sair** para desconectar.
 - **Áudio incluído:** o jogo e os outros sons acompanham a tela; o Discord desktop é filtrado.
 - **Volume individual:** cada espectador ajusta seu volume, inclusive para silenciar.
 - **Qualidade sob medida:** resolução e FPS separados, sempre limitados à transmissão original.
@@ -108,7 +109,7 @@ npm test
 npm run test:integration
 ```
 
-Os testes usam vídeo e áudio sintéticos. Verificam entrada direta, três participantes, duas transmissões simultâneas, volume, limites de resolução/FPS, áudio recebido por WebRTC, substituição de faixa audível sem trocar a chamada de vídeo e restauração de AudioContext suspenso/encerrado. Testes nativos simulam troca de processo, erro, fonte travada e cancelamento de tentativas pendentes.
+Os testes usam vídeo e áudio sintéticos. Verificam entrada direta, três participantes, duas transmissões simultâneas, volume, limites de resolução/FPS, áudio recebido por WebRTC, substituição de faixa audível sem trocar a chamada de vídeo e restauração de AudioContext suspenso/encerrado. A regressão de navegação verifica que transmissor e espectador podem ir ao Início e voltar mantendo a captura e a mesma chamada, com áudio/vídeo chegando enquanto a sala está fora da tela. Testes nativos simulam troca de processo, erro, fonte travada e cancelamento de tentativas pendentes.
 
 As falhas injetadas e os testes automatizados não substituem uma sessão de várias horas em cada combinação de sistemas. A correção cobre os caminhos identificados no código; o teste prolongado em uma chamada real deve ser repetido após atualizar.
 
