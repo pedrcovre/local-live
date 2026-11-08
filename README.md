@@ -165,4 +165,4 @@ native-audio/           binários distribuídos
 
 [Electron](https://www.electronjs.org/docs/latest/api/session) · [PeerJS](https://peerjs.com/) · [Captura por processo da Microsoft](https://github.com/microsoft/Windows-classic-samples/tree/main/Samples/ApplicationLoopback) · [native-audio-node](https://github.com/predict-woo/native-audio-node)
 
-MIT. Veja [LICENSE](LICENSE) e os avisos dos componentes nativos. Marca, código e documentação do Local Live são mantidos neste repositório privado.
+MIT. Veja [LICENSE](LICENSE) e os avisos dos componentes nativos. Marca, código e documentação do Local Live são mantidos neste repositório.
