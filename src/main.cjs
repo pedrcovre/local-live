@@ -18,6 +18,14 @@ app.on('second-instance', (_event, args) => { const url = args.find(arg => arg.s
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('disable-background-timer-throttling');
 app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+// Native Windows occlusion tracking can reduce video work independently of JS
+// timer throttling. Keep the receive/render pipeline active behind other apps.
+if (process.platform === 'win32') app.commandLine.appendSwitch('disable-features', [app.commandLine.getSwitchValue('disable-features'), 'CalculateNativeWinOcclusion'].filter(Boolean).join(','));
+function playbackState(foreground, reason) {
+  if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return;
+  win.webContents.setBackgroundThrottling(false);
+  win.webContents.send('playback-state', { foreground, reason });
+}
 function keepActive(active) {
   if (active && powerBlocker === undefined) powerBlocker = powerSaveBlocker.start('prevent-app-suspension');
   if (!active && powerBlocker !== undefined) { powerSaveBlocker.stop(powerBlocker); powerBlocker = undefined; }
@@ -33,7 +41,7 @@ function guard(event) { if (!trusted(event.senderFrame)) throw new Error('Origem
 app.whenReady().then(() => {
   let prefs;
   if (app.isPackaged && !app.isDefaultProtocolClient('locallive')) app.setAsDefaultProtocolClient('locallive');
-  powerMonitor.on('resume', () => audio?.restart());
+  powerMonitor.on('resume', () => { audio?.restart(); playbackState(true, 'system-resume'); });
   ipcMain.handle('media-active', (event, active) => { guard(event); keepActive(active === true); });
   audio = new DiscordAudio({ factory: () => nativeFactory(app), processes: () => discordProcesses(app), emit: packet => { if (win && !win.isDestroyed()) win.webContents.send('audio-packet', packet); } });
   ipcMain.handle('audio-start', event => { guard(event); if (testing) throw new Error('Captura real de áudio bloqueada nos testes.'); return audio.start(); });
@@ -86,6 +94,8 @@ app.whenReady().then(() => {
   win = new BrowserWindow({ width: 1280, height: 860, minWidth: 1000, minHeight: 720, title: 'Local Live', backgroundColor: '#f5f5f7', show: !testing,
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, backgroundThrottling: false } });
   win.removeMenu();
+  for (const event of ['focus', 'restore', 'show']) win.on(event, () => playbackState(true, event));
+  for (const event of ['blur', 'minimize', 'hide']) win.on(event, () => playbackState(false, event));
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', e => e.preventDefault());
   win.webContents.on('will-attach-webview', e => e.preventDefault());

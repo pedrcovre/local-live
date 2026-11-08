@@ -23,6 +23,7 @@ Crie uma sala com um nome, copie o convite e envie aos amigos. A entrada é dire
 - **Sua tela no centro:** quando você está transmitindo sem assistir a outra tela, a prévia aparece no player principal, sempre sem reproduzir o próprio áudio. Os controles de qualidade/volume aparecem ao assistir a outra pessoa.
 - **Compartilhamento independente:** encerrar sua tela mantém a sala e as outras transmissões.
 - **Navegação sem interrupção:** abrir o Início mantém a sala, o compartilhamento e a transmissão assistida. Volte pelo botão **Voltar à sala** ou pela sala na lateral. Use **Sair** para desconectar.
+- **Retorno após Alt+Tab:** ao restaurar ou voltar à janela, o player de vídeo é restaurado sem parar a captura. Se a recepção continuar em FPS muito baixos por várias amostras, o app reconecta apenas a transmissão assistida, preservando sala, volume e qualidade/FPS escolhidos. A reconexão de mídia pode causar uma breve interrupção do áudio assistido.
 - **Áudio incluído:** o jogo e os outros sons acompanham a tela; o Discord desktop é filtrado.
 - **Volume individual:** cada espectador ajusta seu volume, inclusive para silenciar.
 - **Qualidade sob medida:** resolução e FPS separados, sempre limitados à transmissão original.
@@ -88,6 +89,8 @@ Abra o **Discord desktop** e entre na chamada antes de compartilhar. Discord no 
 
 ### Qualidade e FPS
 
+A recepção monitora quadros decodificados, incluindo o caso em que o relógio do vídeo avança mas a taxa fica em aproximadamente 1 FPS. Há tolerância de inicialização, de retorno à janela e de quedas breves, com intervalo mínimo entre reconexões. No Windows, o cálculo de oclusão nativa do Chromium fica desativado para evitar redução do trabalho de vídeo quando outro aplicativo cobre a janela; o app também mantém `backgroundThrottling` desativado. Referências: [Chromium](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/ui/base/ui_base_features.cc), [Electron](https://www.electronjs.org/docs/latest/api/web-contents#contentssetbackgroundthrottlingallowed).
+
 Resoluções: **480p, 720p, 1080p**. FPS: **15, 30, 60, 120 e 144** na recepção, respeitando o limite da origem; a transmissão oferece 30/60/120/144. O limite de 10–100 Mbps é de **vídeo total por transmissor**, dividido entre seus espectadores. Áudio e overhead acrescentam tráfego.
 
 A cadência fixa usa um worker independente da prévia. Se a captura entregar menos imagens, repete o último quadro; isso completa a cadência sem criar movimentos novos. Os contadores continuam medindo quadros reais codificados/decodificados. GPU, captura, rede e decodificador ainda podem limitar o resultado; 120/144 FPS exigem mais hardware e permanecem experimentais. Fontes menores são ampliadas com proporção preservada e bordas.
@@ -125,6 +128,8 @@ npm run test:integration
 Os testes usam vídeo e áudio sintéticos. Verificam entrada direta, três participantes, duas transmissões simultâneas, volume, limites de resolução/FPS, áudio recebido por WebRTC, substituição de faixa audível sem trocar a chamada de vídeo e restauração de AudioContext suspenso/encerrado. A regressão de navegação verifica que transmissor e espectador podem ir ao Início e voltar mantendo a captura e a mesma chamada, com áudio/vídeo chegando enquanto a sala está fora da tela. Testes nativos simulam troca de processo, erro, fonte travada e cancelamento de tentativas pendentes.
 
 As falhas injetadas e os testes automatizados não substituem uma sessão de várias horas em cada combinação de sistemas. A correção cobre os caminhos identificados no código; o teste prolongado em uma chamada real deve ser repetido após atualizar.
+
+O teste de segundo plano minimiza/restaura o receptor e injeta um fluxo WebRTC real de 1 FPS. Verifica que a taxa se recupera, o áudio volta e a captura do transmissor permanece a mesma. A recepção é configurada abaixo dos limites da origem para conferir a preservação de qualidade/FPS. Esse teste roda no Mac; a alternância real com Alt+Tab no Windows ainda precisa de validação em um Windows.
 
 ### Compilar pacotes
 

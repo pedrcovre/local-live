@@ -196,13 +196,13 @@ export class Room extends EventTarget {
         if (pc.connectionState !== 'connected') continue;
         const report = await pc.getStats(); let video, audio, pair;
         report.forEach(item => { if (item.type === direction && item.kind === 'video' && !item.isRemote) video = item; if (item.type === direction && item.kind === 'audio' && !item.isRemote) audio = item; if (item.type === 'transport' && item.selectedCandidatePairId) pair = report.get(item.selectedCandidatePairId); });
-        if (!video || epoch !== this.epoch) continue;
+        if (!video || epoch !== this.epoch || (id === 'receive' && this.call?.peerConnection !== pc)) continue;
         const previous = this.previous.get(id), frames = video.framesEncoded ?? video.framesDecoded ?? 0, bytes = video.bytesSent ?? video.bytesReceived ?? 0, elapsed = previous ? (video.timestamp - previous.time) / 1000 : 0;
         const audioBytes = audio?.bytesReceived ?? audio?.bytesSent ?? 0;
         const audioLast = !previous || audioBytes !== previous.audioBytes ? Date.now() : previous.audioLast;
         this.previous.set(id, { time: video.timestamp, frames, bytes, audioBytes, audioLast });
         if (id === 'receive' && this.remoteStream?.getAudioTracks().length && Date.now() - audioLast > 12000) this.requestAudioRepair();
-        this.emit('stats', { id, fps: Math.round(elapsed > 0 ? (frames - previous.frames) / elapsed : video.framesPerSecond || 0), width: video.frameWidth || 0, height: video.frameHeight || 0, mbps: elapsed > 0 ? (bytes - previous.bytes) * 8 / elapsed / 1e6 : 0, rtt: Math.round((pair?.currentRoundTripTime || 0) * 1000), audioBytes, codec: report.get(video.codecId)?.mimeType || '' });
+        this.emit('stats', { id, sampleSeconds: elapsed, fps: Math.round(elapsed > 0 ? (frames - previous.frames) / elapsed : video.framesPerSecond || 0), width: video.frameWidth || 0, height: video.frameHeight || 0, mbps: elapsed > 0 ? (bytes - previous.bytes) * 8 / elapsed / 1e6 : 0, rtt: Math.round((pair?.currentRoundTripTime || 0) * 1000), audioBytes, codec: report.get(video.codecId)?.mimeType || '' });
       }
     } catch {} finally { this.statsBusy = false; }
   }

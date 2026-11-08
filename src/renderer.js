@@ -3,6 +3,7 @@ import { readInvite, capsFor, HEIGHTS, RATES } from './room-protocol.cjs';
 import { normalizeVideo } from './video.js';
 import { filteredAudio } from './filtered-audio.js';
 import { RoomPresence } from './presence.js';
+import { PlaybackRecovery } from './playback-recovery.cjs';
 const $ = id => document.getElementById(id);
 const runtime = await window.desktop.runtime();
 let prefs = await window.desktop.preferences('read');
@@ -14,6 +15,8 @@ let view = 'home';
 let busy = false, captureCleanup, sharedAudio, captureStats, watchingCaps, playbackStall = 0, lastPlaybackTime = 0;
 let volume = .8, rememberedVolume = .8;
 let detachStreamListeners = () => {};
+let nativeForeground = true, previouslyShowingRoom = false;
+const playback = new PlaybackRecovery({ rebind: resetVideoPlayback, reconnect: reconnectWatchedVideo });
 $('my-name').value = prefs.name || 'Visitante';
 $('remote').muted = true;
 // Synthetic tests silence the physical output with Chromium's mute-audio flag.
@@ -25,6 +28,7 @@ function updateProfile() { $('my-avatar').textContent = initials(name()); window
 function controls() {
   const active = !!room.active;
   const showingRoom = active && view === 'room';
+  const returning = showingRoom && !previouslyShowingRoom; previouslyShowingRoom = showingRoom;
   $('home-view').hidden = showingRoom; $('room-view').hidden = !showingRoom;
   $('home').classList.toggle('active', !showingRoom);
   $('active-room').hidden = !active;
@@ -37,6 +41,7 @@ function controls() {
   $('my-name').disabled = active;
   presence.track(prefs.rooms, room.active && room.members.has(room.id) ? room.identity.id : null);
   savedRooms(); renderStage();
+  if (returning && nativeForeground) playback.resume();
 }
 function savedRooms() {
   $('saved-list').replaceChildren(); $('saved-empty').hidden = !!prefs.rooms.length;
@@ -205,10 +210,30 @@ room.addEventListener('left', () => { view = 'home'; stopCapture(); controls(); 
 room.addEventListener('broadcast', ({ detail }) => { if (!detail.active) stopCapture(); controls(); });
 room.addEventListener('watching', ({ detail }) => { renderStage(); $('watch-title').textContent = `Tela de ${detail.name}`; $('watch-status').textContent = 'Conectando…'; $('watch-live').hidden = false; qualityOptions(detail.caps); renderMembers(); });
 room.addEventListener('quality', ({ detail }) => { qualityOptions(detail.caps, detail.quality); $('watch-status').textContent = `${detail.quality.height}p · ${detail.quality.fps} FPS`; });
-room.addEventListener('stream', ({ detail }) => { renderStage(); updateVolume(); detachStreamListeners(); const refresh = () => { if (room.remoteStream === detail.stream) resetAudioPlayback(); }; detail.stream.addEventListener('addtrack', refresh); detail.stream.addEventListener('removetrack', refresh); detachStreamListeners = () => { detail.stream.removeEventListener('addtrack', refresh); detail.stream.removeEventListener('removetrack', refresh); }; resetAudioPlayback(); lastPlaybackTime = 0; playbackStall = 0; });
-room.addEventListener('unwatched', () => { $('remote-audio').srcObject = null; detachStreamListeners(); detachStreamListeners = () => {}; for (const id of ['watch-height', 'watch-fps']) $(id).disabled = true; renderStage(); renderMembers(); });
+room.addEventListener('stream', ({ detail }) => { playback.track(room.call); renderStage(); updateVolume(); detachStreamListeners(); const refresh = () => { if (room.remoteStream === detail.stream) resetAudioPlayback(); }; detail.stream.addEventListener('addtrack', refresh); detail.stream.addEventListener('removetrack', refresh); detachStreamListeners = () => { detail.stream.removeEventListener('addtrack', refresh); detail.stream.removeEventListener('removetrack', refresh); }; resetAudioPlayback(); lastPlaybackTime = 0; playbackStall = 0; });
+room.addEventListener('unwatched', () => { playback.track(null); $('remote-audio').srcObject = null; detachStreamListeners(); detachStreamListeners = () => {}; for (const id of ['watch-height', 'watch-fps']) $(id).disabled = true; renderStage(); renderMembers(); });
 room.addEventListener('repair-audio', () => sharedAudio?.repair().catch(() => {}));
-room.addEventListener('stats', ({ detail }) => { if (detail.id === 'receive') $('viewer-stats').textContent = `${detail.width}×${detail.height} · ${detail.fps} FPS recebidos · ${detail.mbps.toFixed(1)} Mbps · ${detail.rtt} ms`; });
+room.addEventListener('stats', ({ detail }) => {
+  if (detail.id !== 'receive' || !room.watching) return;
+  $('viewer-stats').textContent = `${detail.width}×${detail.height} · ${detail.fps} FPS recebidos · ${detail.mbps.toFixed(1)} Mbps · ${detail.rtt} ms`;
+  playback.observe({ session: room.call, fps: detail.fps, targetFps: room.applied?.fps || room.members.get(room.watching)?.caps?.fps, sampleSeconds: detail.sampleSeconds, visible: nativeForeground && view === 'room' && !document.hidden });
+});
+function resetVideoPlayback() {
+  const source = room.watching ? room.remoteStream : room.stream; if (!source) return;
+  const video = $('remote'); video.srcObject = null; video.srcObject = new MediaStream(source.getVideoTracks()); video.__sourceStream = source;
+  video.play().catch(() => {}); lastPlaybackTime = 0; playbackStall = 0;
+}
+function reconnectWatchedVideo() {
+  const publisher = room.watching, caps = room.members.get(publisher)?.caps;
+  if (!room.active || !caps || !nativeForeground || view !== 'room' || document.hidden) return;
+  const quality = { ...(room.applied || room.requested || caps) };
+  room.watch(publisher, quality); $('watch-status').textContent = 'Reconectando vídeo…';
+}
+function resumePlayback() { nativeForeground = true; playback.resume(); }
+function suspendPlayback() { nativeForeground = false; playback.suspend(); }
+window.desktop.onPlaybackState(state => state.foreground ? resumePlayback() : suspendPlayback());
+window.addEventListener('focus', resumePlayback); window.addEventListener('blur', suspendPlayback);
+document.addEventListener('visibilitychange', () => document.hidden ? suspendPlayback() : resumePlayback());
 let audioResetting = false, audioLastTime = 0, audioStall = 0;
 async function resetAudioPlayback() {
   const remote = room.remoteStream; if (!remote || !remote.getAudioTracks().length || audioResetting) return;
@@ -228,7 +253,7 @@ const playbackHealth = setInterval(() => {
   if (video.paused) video.play().catch(() => {});
   if (video.currentTime === lastPlaybackTime && video.readyState >= 2) playbackStall++; else playbackStall = 0;
   lastPlaybackTime = video.currentTime;
-  if (playbackStall >= 4) { const stream = video.srcObject; video.srcObject = null; video.srcObject = stream; video.play().catch(() => {}); playbackStall = 0; }
+  if (playbackStall >= 4 && nativeForeground && view === 'room') resetVideoPlayback();
   if (audio.srcObject && !audio.muted) {
     if (audio.paused) audio.play().catch(() => {});
     if (audio.currentTime === audioLastTime && audio.readyState >= 2) audioStall++; else audioStall = 0;

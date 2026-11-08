@@ -3,6 +3,7 @@ contextBridge.exposeInMainWorld('desktop', {
   platform: process.platform,
   activity: active => ipcRenderer.invoke('media-active', active),
   runtime: () => ipcRenderer.invoke('runtime'),
+  onPlaybackState: callback => { const listener = (_event, value) => callback(value); ipcRenderer.on('playback-state', listener); return () => ipcRenderer.removeListener('playback-state', listener); },
   preferences: (action, data) => ipcRenderer.invoke('preferences', action, data),
   audioStart: () => ipcRenderer.invoke('audio-start'),
   audioRepair: id => ipcRenderer.invoke('audio-repair', id),
